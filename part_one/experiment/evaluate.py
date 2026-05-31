@@ -8,6 +8,7 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from part_one.experiment.config import PartOneConfig
 from part_one.experiment.dataset import RankingDataset
 from part_one.utils.io_utils import write_json
+from part_one.utils.log_utils import log_message
 from part_one.utils.metrics import compute_ranking_metrics, rank_of_label
 from part_one.utils.predict import save_error_examples, save_predictions
 
@@ -18,12 +19,21 @@ def evaluate_checkpoint(
     data_path: Path,
     save_outputs: bool = False,
 ) -> Dict[str, float]:
+    log_message(config.run_log_path, f"Loading checkpoint for evaluation: {checkpoint_dir}")
     tokenizer = AutoTokenizer.from_pretrained(str(checkpoint_dir))
     model = AutoModelForSequenceClassification.from_pretrained(str(checkpoint_dir))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
     metrics, prediction_rows = evaluate_model(model, tokenizer, config, data_path, device)
+    log_message(
+        config.run_log_path,
+        "Evaluation metrics: "
+        f"MRR={metrics['mrr']:.6f}, "
+        f"R@1={metrics['recall_at_1']:.6f}, "
+        f"R@2={metrics['recall_at_2']:.6f}, "
+        f"R@5={metrics['recall_at_5']:.6f}",
+    )
 
     if save_outputs:
         write_json(config.test_metrics_path, metrics)
@@ -46,6 +56,7 @@ def evaluate_model(
 ) -> Tuple[Dict[str, float], List[Dict[str, object]]]:
     dataset = RankingDataset(data_path, config.num_candidates)
     records = dataset.records()
+    log_message(config.run_log_path, f"Scoring {len(records)} ranking examples from {data_path}")
     scores_by_example = _score_records(model, tokenizer, records, config, device)
 
     ranks: List[int] = []
@@ -123,4 +134,3 @@ def _autocast_context(config: PartOneConfig, device: torch.device):
     if config.allow_fp16_fallback:
         return torch.autocast(device_type="cuda", dtype=torch.float16)
     return nullcontext()
-

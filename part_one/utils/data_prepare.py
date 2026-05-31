@@ -5,11 +5,13 @@ from typing import Dict, Iterable, Iterator, List, Optional, Sequence
 
 from part_one.experiment.config import PartOneConfig
 from part_one.utils.io_utils import ensure_dir, write_dicts_csv, write_json
+from part_one.utils.log_utils import log_message
 from part_one.utils.text_utils import normalize_text, remove_stopwords, word_tokens
 
 
 def prepare_part_one_data(config: PartOneConfig) -> None:
     """Create fixed train/dev/valid/test files from raw Ubuntu v2 CSV files."""
+    log_message(config.run_log_path, "Preparing Part One data files.")
     for path in [config.raw_dir, config.processed_dir, config.results_dir]:
         ensure_dir(path)
 
@@ -24,10 +26,22 @@ def prepare_part_one_data(config: PartOneConfig) -> None:
         config.seed + 1,
     )
 
+    if not train_records:
+        raise ValueError(f"No train records were read from {config.raw_train_path}")
+
     _write_train_records(config.train_path, train_records)
     _write_train_records(config.train_dev_path, train_dev_records)
+    log_message(
+        config.run_log_path,
+        f"Wrote {len(train_records)} training rows to {config.train_path}",
+    )
+    log_message(
+        config.run_log_path,
+        f"Wrote {len(train_dev_records)} dev training rows to {config.train_dev_path}",
+    )
 
     _prepare_ranking_split(
+        config=config,
         raw_path=config.raw_valid_path,
         output_path=config.valid_path,
         dev_output_path=config.valid_dev_path,
@@ -38,6 +52,7 @@ def prepare_part_one_data(config: PartOneConfig) -> None:
         num_candidates=config.num_candidates,
     )
     _prepare_ranking_split(
+        config=config,
         raw_path=config.raw_test_path,
         output_path=config.test_path,
         dev_output_path=config.test_dev_path,
@@ -50,6 +65,7 @@ def prepare_part_one_data(config: PartOneConfig) -> None:
 
     stats = compute_data_statistics(config)
     write_json(config.data_statistics_path, stats)
+    log_message(config.run_log_path, f"Wrote data statistics to {config.data_statistics_path}")
 
 
 def _iter_raw_train(path: Path) -> Iterator[Dict[str, object]]:
@@ -98,6 +114,7 @@ def _raw_train_row_to_record(
 
 
 def _prepare_ranking_split(
+    config: PartOneConfig,
     raw_path: Path,
     output_path: Path,
     dev_output_path: Path,
@@ -108,6 +125,9 @@ def _prepare_ranking_split(
     num_candidates: int,
 ) -> None:
     records = list(_iter_raw_ranking(raw_path, num_candidates))
+    if not records:
+        raise ValueError(f"No ranking records were read from {raw_path}")
+
     rng = random.Random(seed)
     rng.shuffle(records)
 
@@ -123,6 +143,14 @@ def _prepare_ranking_split(
         output_path,
         _shuffle_candidates(main_records, seed + 20, split_name, num_candidates),
         num_candidates,
+    )
+    log_message(
+        config.run_log_path,
+        f"Wrote {len(main_records)} {split_name} ranking rows to {output_path}",
+    )
+    log_message(
+        config.run_log_path,
+        f"Wrote {len(dev_records)} {split_name} dev ranking rows to {dev_output_path}",
     )
 
 

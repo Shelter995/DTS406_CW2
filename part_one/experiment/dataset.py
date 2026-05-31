@@ -11,6 +11,8 @@ class PairClassificationDataset(Dataset):
 
     def __init__(self, csv_path: Path, tokenizer, max_length: int) -> None:
         self.rows = _read_rows(csv_path)
+        if not self.rows:
+            raise ValueError(f"No training rows were found in {csv_path}")
         self.tokenizer = tokenizer
         self.max_length = max_length
 
@@ -37,6 +39,8 @@ class RankingDataset:
 
     def __init__(self, csv_path: Path, num_candidates: int) -> None:
         self.rows = _read_rows(csv_path)
+        if not self.rows:
+            raise ValueError(f"No ranking rows were found in {csv_path}")
         self.num_candidates = num_candidates
 
     def __len__(self) -> int:
@@ -61,4 +65,3 @@ class RankingDataset:
 def _read_rows(csv_path: Path) -> List[Dict[str, str]]:
     with csv_path.open("r", encoding="utf-8", errors="replace", newline="") as f:
         return list(csv.DictReader(f))
-

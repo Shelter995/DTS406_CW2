@@ -14,11 +14,13 @@ from part_one.experiment.config import PartOneConfig
 from part_one.experiment.dataset import PairClassificationDataset
 from part_one.experiment.evaluate import evaluate_model
 from part_one.utils.io_utils import ensure_dir, write_dicts_csv
+from part_one.utils.log_utils import log_message
 
 
 def train_model(config: PartOneConfig) -> Path:
     ensure_dir(config.checkpoint_dir)
     ensure_dir(config.log_dir)
+    log_message(config.run_log_path, f"Loading tokenizer and model from {config.model_dir}")
 
     tokenizer = AutoTokenizer.from_pretrained(str(config.model_dir))
     model = AutoModelForSequenceClassification.from_pretrained(
@@ -33,6 +35,10 @@ def train_model(config: PartOneConfig) -> Path:
         config.train_path,
         tokenizer,
         config.max_length,
+    )
+    log_message(
+        config.run_log_path,
+        f"Training rows: {len(train_dataset)} | train batch size: {config.train_batch_size}",
     )
     train_loader = DataLoader(
         train_dataset,
@@ -60,9 +66,14 @@ def train_model(config: PartOneConfig) -> Path:
     best_checkpoint = config.checkpoint_dir / "best"
     validation_rows: List[Dict[str, object]] = []
     precision_mode = _precision_mode(config, device)
-    scaler = torch.cuda.amp.GradScaler(enabled=precision_mode == "fp16")
+    scaler = _make_grad_scaler(precision_mode)
+    log_message(
+        config.run_log_path,
+        f"Device: {device} | precision mode: {precision_mode} | epochs: {config.epochs}",
+    )
 
     for epoch in range(1, config.epochs + 1):
+        log_message(config.run_log_path, f"Starting epoch {epoch}/{config.epochs}")
         train_loss = _train_one_epoch(
             model=model,
             train_loader=train_loader,
@@ -72,6 +83,7 @@ def train_model(config: PartOneConfig) -> Path:
             device=device,
             scaler=scaler,
         )
+        log_message(config.run_log_path, f"Finished epoch {epoch}; train loss={train_loss:.6f}")
 
         metrics, _ = evaluate_model(model, tokenizer, config, config.valid_path, device)
         row: Dict[str, object] = {
@@ -91,6 +103,11 @@ def train_model(config: PartOneConfig) -> Path:
             best_metric = current_metric
             model.save_pretrained(str(best_checkpoint))
             tokenizer.save_pretrained(str(best_checkpoint))
+            log_message(
+                config.run_log_path,
+                f"Saved new best checkpoint to {best_checkpoint} with "
+                f"{config.metric_for_best_model}={best_metric:.6f}",
+            )
 
     return best_checkpoint
 
@@ -127,6 +144,12 @@ def _train_one_epoch(
             update_count += 1
 
         total_loss += loss.detach().float().item() * config.gradient_accumulation_steps
+        if step == 1 or step % 100 == 0 or step == len(train_loader):
+            print(
+                f"  step {step}/{len(train_loader)} "
+                f"loss={loss.detach().float().item() * config.gradient_accumulation_steps:.6f}",
+                flush=True,
+            )
 
     if len(train_loader) % config.gradient_accumulation_steps != 0:
         _optimizer_step(model, optimizer, scheduler, scaler)
@@ -146,6 +169,16 @@ def _optimizer_step(model, optimizer, scheduler, scaler) -> None:
         optimizer.step()
     scheduler.step()
     optimizer.zero_grad(set_to_none=True)
+
+
+def _make_grad_scaler(precision_mode: str):
+    enabled = precision_mode == "fp16"
+    if hasattr(torch, "amp") and hasattr(torch.amp, "GradScaler"):
+        try:
+            return torch.amp.GradScaler("cuda", enabled=enabled)
+        except TypeError:
+            return torch.amp.GradScaler(enabled=enabled)
+    return torch.cuda.amp.GradScaler(enabled=enabled)
 
 
 def _precision_mode(config: PartOneConfig, device: torch.device) -> str:

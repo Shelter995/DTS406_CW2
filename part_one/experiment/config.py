@@ -57,6 +57,7 @@ class PartOneConfig:
     test_predictions_path: Path = field(init=False)
     error_examples_path: Path = field(init=False)
     data_statistics_path: Path = field(init=False)
+    run_log_path: Path = field(init=False)
 
     def __post_init__(self) -> None:
         self.data_dir = self.root_dir / "data" / "part_one"
@@ -86,8 +87,8 @@ class PartOneConfig:
         self.test_predictions_path = self.results_dir / "test_predictions.csv"
         self.error_examples_path = self.results_dir / "error_examples.csv"
         self.data_statistics_path = self.results_dir / "data_statistics.json"
+        self.run_log_path = self.log_dir / "run.log"
 
 
 def get_config() -> PartOneConfig:
     return PartOneConfig()
-
