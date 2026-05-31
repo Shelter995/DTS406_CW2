@@ -63,9 +63,9 @@ class PartOneConfig:
         self.data_dir = self.root_dir / "data" / "part_one"
         self.raw_dir = self.data_dir / "raw"
         self.processed_dir = self.data_dir / "processed"
-        self.results_dir = self.data_dir / "results"
 
         self.output_dir = self.root_dir / "outputs" / "part_one"
+        self.results_dir = self.output_dir / "results"
         self.checkpoint_dir = self.output_dir / "checkpoints"
         self.log_dir = self.output_dir / "logs"
 
