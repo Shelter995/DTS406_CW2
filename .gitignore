@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+
+.idea/
+.vscode/
+.venv/
+venv/
+
+data/
+models/
+outputs/
+hf_cache/
+
+*.log
